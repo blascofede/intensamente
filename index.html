@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dentro de la Mente de Federico</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js para los gráficos 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        #ar-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
+        #video-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; display: flex; flex-direction: column; pointer-events: none; }
+        .ui-element { pointer-events: auto; }
+        .pulse { animation: pulse-animation 2s infinite; }
+        @keyframes pulse-animation { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); } 100% { box-shadow: 0 0 0 20px rgba(255, 255, 255, 0); } }
+        #vignette-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 15; pointer-events: none; box-shadow: inset 0 0 0px rgba(0,0,0,0); transition: box-shadow 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-black text-white">
+
+    <!-- Pantalla de Inicio -->
+    <div id="start-screen" class="w-full h-screen flex flex-col items-center justify-center p-8 text-center z-50 absolute inset-0 bg-gray-900">
+        <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500 mb-4">Dentro de la Mente de Federico</h1>
+        <p class="text-gray-300 text-lg mb-8 max-w-2xl">Estás en el centro de control. Federico tiene una entrevista de trabajo en 5 minutos. Sus emociones están a punto de explotar. Usa tu voz para hablar con ellas.</p>
+        <button id="start-button" class="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 transition-all duration-300 ease-in-out transform hover:scale-105 text-xl ui-element">
+            Iniciar Experiencia
+        </button>
+        <p id="start-error-message" class="text-red-400 mt-4 h-12"></p>
+    </div>
+
+    <!-- Contenido Principal de la App -->
+    <div id="app-container" class="w-full h-screen hidden">
+        <video id="video-background" playsinline autoplay muted></video>
+        <canvas id="ar-canvas"></canvas>
+        <div id="vignette-overlay"></div>
+
+        <div class="ui-overlay p-4 md:p-6">
+            <!-- Header -->
+            <header class="w-full flex justify-between items-center ui-element">
+                <div class="bg-black bg-opacity-50 p-3 rounded-lg backdrop-blur-sm">
+                    <h2 class="text-xl font-bold text-white">Centro de Control</h2>
+                    <p class="text-sm text-gray-300">Entrevista en: <span id="timer">05:00</span></p>
+                </div>
+                 <button id="mic-button" class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center focus:outline-none ring-4 ring-red-500/50 transition-all duration-300 transform hover:scale-110">
+                    <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                </button>
+            </header>
+
+            <main class="flex-grow"></main>
+
+            <!-- Diálogo y Controles Inferiores -->
+            <footer class="w-full flex flex-col items-center space-y-4">
+                <div id="dialogue-box" class="w-full max-w-3xl bg-black bg-opacity-60 backdrop-blur-md p-4 rounded-xl text-center transition-opacity duration-500 opacity-0 ui-element">
+                    <p class="font-bold text-lg text-purple-300" id="character-name"></p>
+                    <p class="text-white" id="character-dialogue"></p>
+                </div>
+
+                <div class="w-full max-w-3xl bg-black bg-opacity-60 backdrop-blur-md p-4 rounded-xl ui-element">
+                    <label for="reality-slider" class="block text-center font-medium text-gray-300 mb-2">Nivel de Estrés de Federico</label>
+                    <input id="reality-slider" type="range" min="0" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+                
+                <div class="flex space-x-2 overflow-x-auto pb-2 ui-element">
+                     <button class="filter-btn bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap" data-filter="none">Normal</button>
+                     <button class="filter-btn bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap" data-filter="sepia(1)">Nostalgia</button>
+                     <button class="filter-btn bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap" data-filter="grayscale(1)">Vacío</button>
+                     <button class="filter-btn bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap" data-filter="hue-rotate(180deg)">Pánico</button>
+                     <button id="belief-button" class="bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">🌱 Forjar Creencia</button>
+                     <button id="memory-button" class="bg-orange-500 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">🧠 Generar Recuerdo</button>
+                     <button id="dream-button" class="bg-pink-600 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">✨ Generar Sueño</button>
+                     <button id="future-button" class="bg-cyan-600 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">🔮 Simular Futuro</button>
+                     <button id="excuse-button" class="bg-yellow-500 text-black font-semibold px-4 py-2 rounded-lg whitespace-nowrap">💡 Generar Excusa</button>
+                     <button id="peptalk-button" class="bg-green-500 text-black font-semibold px-4 py-2 rounded-lg whitespace-nowrap">📣 Pedir Ánimo</button>
+                     <button id="job-analysis-button" class="bg-slate-500 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">📄 Analizar Oferta</button>
+                     <button id="interviewer-analysis-button" class="bg-red-500 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">🕵️‍♂️ Analizar Entrevistador</button>
+                     <button id="thought-button" class="bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg whitespace-nowrap">💬 Escuchar Pensamiento</button>
+                </div>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Contenedor Genérico para Modales -->
+    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 transition-opacity duration-300 opacity-0 pointer-events-none">
+        <div id="modal-content" class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 relative transform scale-95 transition-all duration-300 text-center">
+            <h2 id="modal-title" class="text-2xl font-bold mb-4"></h2>
+            <div id="modal-loader" class="loader mx-auto my-8"></div>
+            <div id="modal-body" class="hidden">
+                <!-- Contenido dinámico aquí -->
+            </div>
+            <button id="close-modal-button" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors ui-element">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+    </div>
+
+    <audio id="tts-audio" class="hidden"></audio>
+
+    <script type="module">
+        // --- ESTADO DE LA APLICACIÓN ---
+        const state = {
+            isListening: false,
+            apiKey: "AIzaSyBIUHzU5pftnZZ-K5BFEsi6eP84fC9urR4",
+            conversationHistory: [],
+            three: {
+                scene: null, camera: null, renderer: null, clock: null, characters: {},
+            },
+            dom: {},
+            speech: null
+        };
+
+        // --- INICIALIZACIÓN ---
+        document.addEventListener('DOMContentLoaded', () => {
+            cacheDOM();
+            state.dom.startButton.addEventListener('click',initializeApp);
+        });
+        
+        function cacheDOM() {
+            state.dom = {
+                startScreen: document.getElementById('start-screen'),
+                startButton: document.getElementById('start-button'),
+                startErrorMessage: document.getElementById('start-error-message'),
+                appContainer: document.getElementById('app-container'),
+                video: document.getElementById('video-background'),
+                canvas: document.getElementById('ar-canvas'),
+                micButton: document.getElementById('mic-button'),
+                dialogueBox: document.getElementById('dialogue-box'),
+                characterNameEl: document.getElementById('character-name'),
+                characterDialogueEl: document.getElementById('character-dialogue'),
+                realitySlider: document.getElementById('reality-slider'),
+                timerEl: document.getElementById('timer'),
+                audioPlayer: document.getElementById('tts-audio'),
+                vignette: document.getElementById('vignette-overlay'),
+                modal: {
+                    container: document.getElementById('modal-container'),
+                    content: document.getElementById('modal-content'),
+                    title: document.getElementById('modal-title'),
+                    loader: document.getElementById('modal-loader'),
+                    body: document.getElementById('modal-body'),
+                    closeButton: document.getElementById('close-modal-button')
+                },
+                buttons: {
+                    dream: document.getElementById('dream-button'),
+                    future: document.getElementById('future-button'),
+                    excuse: document.getElementById('excuse-button'),
+                    peptalk: document.getElementById('peptalk-button'),
+                    job: document.getElementById('job-analysis-button'),
+                    interviewer: document.getElementById('interviewer-analysis-button'),
+                    thought: document.getElementById('thought-button'),
+                    memory: document.getElementById('memory-button'),
+                    belief: document.getElementById('belief-button'),
+                }
+            };
+        }
+
+        async function initializeApp() {
+            const { startButton, startErrorMessage } = state.dom;
+            startButton.disabled = true;
+            startButton.textContent = "Accediendo...";
+            startErrorMessage.textContent = "";
+
+            try {
+                await setupMedia();
+                initAR();
+                initSpeechRecognition();
+                initUI();
+                state.dom.startScreen.style.display = 'none';
+                state.dom.appContainer.classList.remove('hidden');
+                startTimer();
+                animate();
+            } catch (err) {
+                let msg = "No se pudo iniciar. ";
+                if (err.name === "NotAllowedError") msg += "Necesitamos permiso para la cámara y el micrófono.";
+                else msg += `Error: ${err.message}`;
+                startErrorMessage.textContent = msg;
+                startButton.disabled = false;
+                startButton.textContent = "Iniciar Experiencia";
+            }
+        }
+        
+        // --- CONFIGURACIÓN DE MEDIOS Y AR ---
+        async function tryCamera(constraints, attemptName) {
+            state.dom.startErrorMessage.textContent = `Intentando con ${attemptName}...`;
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            state.dom.video.srcObject = stream;
+            
+            return new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    stream.getTracks().forEach(track => track.stop());
+                    reject(new Error(`La ${attemptName} no empezó a reproducir a tiempo.`));
+                }, 5000);
+                
+                state.dom.video.onplaying = () => {
+                    clearTimeout(timeout);
+                    resolve(stream);
+                };
+                 state.dom.video.onerror = () => {
+                     clearTimeout(timeout);
+                     reject(new Error(`Error en el elemento de video con ${attemptName}.`))
+                 }
+            });
+        }
+
+        async function setupMedia() {
+            if (!('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices)) {
+                throw new Error("Tu navegador no soporta el acceso a la cámara.");
+            }
+            
+            let stream;
+            try {
+                stream = await tryCamera({ video: { facingMode: 'user' }, audio: true }, "cámara frontal");
+            } catch (err1) {
+                console.warn(err1.message);
+                try {
+                    stream = await tryCamera({ video: { facingMode: 'environment' }, audio: true }, "cámara trasera");
+                } catch (err2) {
+                    console.warn(err2.message);
+                    try {
+                        stream = await tryCamera({ video: true, audio: true }, "cámara por defecto");
+                    } catch (err3) {
+                         console.error("Todos los intentos de cámara fallaron.");
+                         throw new Error("No se pudo activar ninguna cámara. Revisa los permisos o si otra app la está usando.");
+                    }
+                }
+            }
+        }
+
+
+        function initAR() {
+            state.three.scene = new THREE.Scene();
+            state.three.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            state.three.camera.position.z = 5;
+            state.three.renderer = new THREE.WebGLRenderer({ canvas: state.dom.canvas, alpha: true, antialias: true });
+            state.three.renderer.setSize(window.innerWidth, window.innerHeight);
+            state.three.clock = new THREE.Clock();
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            state.three.scene.add(ambient);
+            const keyLight = new THREE.DirectionalLight(0xffeeb1, 1);
+            keyLight.position.set(-1, 1, 1);
+            state.three.scene.add(keyLight);
+            const rimLight = new THREE.PointLight(0x9400d3, 1.5, 100);
+            rimLight.position.set(2, 2, 3);
+            state.three.scene.add(rimLight);
+            
+            const { characters } = state.three;
+            characters.Ansiedad = createCharacter(new THREE.TetrahedronGeometry(0.6, 0), new THREE.MeshStandardMaterial({ color: 0xffcc00, wireframe: true, emissive: 0x332200 }), { x: -3, y: 1.5, z: 0 });
+            characters.Depresion = createCharacter(new THREE.SphereGeometry(0.6, 32, 16), new THREE.MeshToonMaterial({ color: 0x2a3a8a }), { x: 3, y: 1.5, z: 0 });
+            characters.Vagancia = createCharacter(new THREE.TorusKnotGeometry(0.5, 0.15, 100, 16), new THREE.MeshStandardMaterial({ color: 0x8fbc8f, roughness: 0.9, transparent: true, opacity: 0.8 }), { x: -2, y: -1.5, z: 0 });
+            characters.Adolescencia = createCharacter(new THREE.OctahedronGeometry(0.6, 0), new THREE.MeshPhysicalMaterial({ color: 0x9400d3, metalness: 0.9, roughness: 0.1, clearcoat: 1.0 }), { x: 2, y: -1.5, z: 0 });
+            characters.Brutalidad = createCharacter(new THREE.DodecahedronGeometry(0.7, 0), new THREE.MeshStandardMaterial({ color: 0xb22222, roughness: 0.7 }), { x: 0, y: 2.5, z: -1 });
+        }
+
+        function createCharacter(geometry, material, position) {
+            const char = new THREE.Mesh(geometry, material);
+            char.position.set(position.x, position.y, position.z);
+            state.three.scene.add(char);
+            return char;
+        }
+
+        // --- BUCLE DE ANIMACIÓN Y LÓGICA DE RENDERIZADO ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = state.three.clock.getDelta();
+            const time = performance.now() * 0.001;
+            const stressFactor = 1 + (state.dom.realitySlider.value / 100) * 2; 
+
+            Object.values(state.three.characters).forEach(char => {
+                char.rotation.x += delta * 0.1 * stressFactor;
+                char.rotation.y += delta * 0.1 * stressFactor;
+            });
+
+            const { characters } = state.three;
+            if(characters.Ansiedad) {
+                characters.Ansiedad.position.x += Math.sin(time * 10 * stressFactor) * 0.01;
+                characters.Ansiedad.rotation.z += delta * 2 * stressFactor;
+            }
+            if(characters.Depresion) {
+                characters.Depresion.position.y += Math.sin(time * 0.5) * 0.002 * (stressFactor / 3); 
+            }
+            if(characters.Vagancia) {
+                characters.Vagancia.rotation.set(Math.sin(time * 0.3) * 0.5, Math.cos(time * 0.4) * 0.5, 0);
+            }
+            if(characters.Adolescencia) {
+                if (Math.random() > 0.98) {
+                    characters.Adolescencia.rotation.x += (Math.random() - 0.5) * 2 * stressFactor;
+                }
+            }
+            if(characters.Brutalidad) {
+                const scale = 1 + Math.sin(time * 2 * stressFactor) * 0.05;
+                characters.Brutalidad.scale.set(scale, scale, scale);
+            }
+
+            state.three.renderer.render(state.three.scene, state.three.camera);
+        }
+
+        // --- LÓGICA DE VOZ E IA ---
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return;
+            state.speech = new SpeechRecognition();
+            state.speech.lang = 'es-ES';
+            state.speech.interimResults = false;
+            state.speech.continuous = false;
+
+            state.speech.onresult = (event) => {
+                const userInput = event.results[0][0].transcript;
+                updateDialogue("Tú", userInput);
+                sendToGemini(userInput);
+            };
+            state.speech.onerror = () => stopListening();
+            state.speech.onend = () => { if (state.isListening) state.speech.start(); };
+        }
+
+        function toggleListening() { state.isListening ? stopListening() : startListening(); }
+        
+        function startListening(prompt = "Escuchando...") {
+            updateDialogue("", prompt, false);
+            state.isListening = true;
+            state.dom.micButton.classList.add('pulse', 'bg-green-600');
+            state.dom.micButton.classList.remove('bg-red-600');
+            state.speech?.start();
+        }
+        function stopListening() {
+            state.isListening = false;
+            state.dom.micButton.classList.remove('pulse', 'bg-green-600');
+            state.dom.micButton.classList.add('bg-red-600');
+            state.speech?.stop();
+        }
+        
+        async function sendToGemini(userInput) {
+            stopListening();
+            updateDialogue("Emociones", "Procesando respuesta...", true);
+            const stressLevel = state.dom.realitySlider.value;
+            const systemPrompt = `Eres el panel de control de emociones de Federico Blasco, un hombre de 30 años a 5 minutos de una entrevista de trabajo. Su nivel de estrés es ${stressLevel} de 100.
+            Los personajes son:
+            - Ansiedad: Hiperactiva, habla atropelladamente. Usa frases como "¿Y si...?", "¡Seguro que pasa esto!", "¡No, no, no!". Se obsesiona con los peores escenarios posibles.
+            - Depresión: Monótona, apática, habla lento con suspiros. Usa frases como "Da igual.", "¿Para qué molestarse?", "Todo pesa tanto...".
+            - Vagancia: Relajado, bostezando, habla con pereza. Usa palabras como "Uff...", "Qué paja...", "Mejor una siestita, ¿no?". Solo piensa en el mínimo esfuerzo.
+            - Adolescencia: Sarcástica, con tono de superioridad. Usa jerga como "O sea, hello...", "Qué cringe.", "Literal". Rueda los ojos imaginariamente.
+            - Brutalidad: Directa, habla con gruñidos, en frases cortas y simples. Usa palabras como "¡Golpear!", "¡Fuerza!", "¡Romper!". Propone soluciones físicas.
+            El usuario está hablando contigo. Responde como UNO de los personajes, el que sea más relevante a la pregunta. Tu respuesta DEBE empezar con el nombre del personaje seguido de dos puntos (ej. "Ansiedad: ..."). Mantén la respuesta corta, una o dos frases.`;
+            
+            state.conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
+            const payload = { contents: [{ role: "model", parts: [{ text: systemPrompt }] }, ...state.conversationHistory] };
+            const result = await callGeminiAPI({ endpoint: 'generateContent', payload });
+            const responseText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (responseText) {
+                state.conversationHistory.push({ role: "model", parts: [{ text: responseText }] });
+                const [characterName, ...dialogueParts] = responseText.split(':');
+                const dialogue = dialogueParts.join(':').trim();
+                updateDialogue(characterName, dialogue);
+                playTTS(dialogue, characterName.trim());
+                animateSpeakingCharacter(characterName.trim());
+            } else {
+                 updateDialogue("Error", "No se pudo obtener respuesta.");
+                 startListening();
+            }
+        }
+        
+        async function playTTS(text, character) {
+            let voiceName = "Charon"; // Federico's default voice
+            const voiceMap = { "Ansiedad": "Fenrir", "Depresion": "Gacrux", "Vagancia": "Sadachbia", "Adolescencia": "Puck", "Brutalidad": "Kore" };
+            if (voiceMap[character]) voiceName = voiceMap[character];
+
+            const payload = {
+                contents: [{ parts: [{ text }] }],
+                generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } }
+            };
+            const result = await callGeminiAPI({ endpoint: 'generateContent', payload, model: 'gemini-2.5-flash-preview-tts' });
+            const audioData = result?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+            if (audioData) {
+                const mimeType = result.candidates[0].content.parts[0].inlineData.mimeType;
+                const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
+                const pcmBuffer = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmBuffer);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                state.dom.audioPlayer.src = URL.createObjectURL(wavBlob);
+                state.dom.audioPlayer.play();
+                state.dom.audioPlayer.onended = startListening;
+            } else {
+                startListening();
+            }
+        }
+        
+        async function callGeminiAPI({ endpoint, payload, model = 'gemini-2.5-flash-preview-05-20' }) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${state.apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error(`Error en la API de Gemini: ${response.statusText}`);
+            return await response.json();
+        }
+
+        // --- MANEJO DE LA INTERFAZ (UI) ---
+        function initUI() {
+            state.dom.micButton.addEventListener('click', toggleListening);
+            state.dom.realitySlider.addEventListener('input', updateStressVisuals);
+            state.dom.modal.closeButton.addEventListener('click', () => closeModal());
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.addEventListener('click', () => { state.dom.canvas.style.filter = btn.dataset.filter; }));
+            
+            const actionButtons = {
+                dream: generateDreamImage,
+                future: simulateFuture,
+                excuse: () => generateGenericResponse('excuse', `Actúa como una de las emociones de Federico (Ansiedad, Depresión, Vagancia, Adolescencia, Brutalidad) a punto de entrar a una entrevista de trabajo con un nivel de estrés de \${stressLevel}/100. Genera una excusa creativa pero terrible para que él evite la entrevista. Tu respuesta DEBE empezar con el nombre del personaje que da la excusa, seguido de dos puntos. Ej: "Vagancia: ...". La excusa debe ser corta y en español.`),
+                peptalk: () => generateGenericResponse('peptalk', `Actúa como una de las emociones de Federico (Ansiedad, Depresión, Vagancia, Adolescencia, Brutalidad) a punto de entrar a una entrevista de trabajo con un nivel de estrés de \${stressLevel}/100. Dale una charla motivacional (un 'pep talk') para animarlo. La charla debe reflejar tu personalidad (puede ser buena, mala o inútil). Tu respuesta DEBE empezar con el nombre del personaje, seguido de dos puntos. Ej: "Ansiedad: ...". Sé breve y habla en español.`),
+                job: () => generateGenericResponse('job', `Actúa como una de las emociones de Federico (Ansiedad, Depresión, Vagancia, Adolescencia, Brutalidad) con un nivel de estrés de \${stressLevel}/100. Analiza esta oferta de trabajo ficticia: "Se busca Ninja Proactivo del Sinergismo Cuántico para equipo dinámico". Critica o encuentra un problema en la oferta desde tu perspectiva única. Tu respuesta DEBE empezar con el nombre del personaje, seguido de dos puntos. Sé breve y habla en español.`),
+                interviewer: () => generateGenericResponse('interviewer', `Actúa como una de las emociones de Federico (Ansiedad, Depresión, Vagancia, Adolescencia, Brutalidad) con un nivel de estrés de \${stressLevel}/100. Describe cómo te imaginas que es el entrevistador que está a punto de ver Federico. Sé creativo y basa la descripción en tu personalidad. Tu respuesta DEBE empezar con el nombre del personaje, seguido de dos puntos. Sé breve y habla en español.`),
+                thought: listenToThought,
+                memory: generateCoreMemory,
+                belief: forgeBelief,
+            };
+            Object.entries(state.dom.buttons).forEach(([key, button]) => button.addEventListener('click', actionButtons[key]));
+        }
+
+        function updateDialogue(name, text, isProcessing = false) {
+            state.dom.characterNameEl.textContent = name;
+            state.dom.characterDialogueEl.textContent = text;
+            state.dom.characterDialogueEl.classList.toggle('italic', isProcessing);
+            state.dom.characterDialogueEl.classList.toggle('text-gray-400', isProcessing);
+            state.dom.dialogueBox.classList.remove('opacity-0');
+        }
+
+        function animateSpeakingCharacter(name) {
+             const char = state.three.characters[name];
+             if(char) {
+                 const originalScale = char.scale.clone();
+                 char.scale.multiplyScalar(1.3);
+                 setTimeout(() => char.scale.copy(originalScale), 600);
+             }
+        }
+        
+        function updateStressVisuals() {
+            const stress = state.dom.realitySlider.value;
+            const vignetteIntensity = stress * 1.5; // Aumenta de 0 a 150
+            state.dom.vignette.style.boxShadow = `inset 0 0 ${vignetteIntensity}px rgba(0,0,0,0.8)`;
+        }
+
+        function startTimer() {
+            let time = 5 * 60;
+            const interval = setInterval(() => {
+                if (time <= 0) { clearInterval(interval); return; }
+                time--;
+                const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+                const seconds = (time % 60).toString().padStart(2, '0');
+                state.dom.timerEl.textContent = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function openModal(title, bodyHTML, titleColor = 'text-white') {
+            const { modal } = state.dom;
+            modal.title.textContent = title;
+            modal.title.className = `text-2xl font-bold mb-4 ${titleColor}`;
+            modal.body.innerHTML = bodyHTML;
+            modal.loader.classList.add('hidden');
+            modal.body.classList.remove('hidden');
+            modal.container.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        function closeModal() {
+            const { modal } = state.dom;
+            modal.container.classList.add('opacity-0', 'pointer-events-none');
+            modal.loader.classList.remove('hidden');
+            modal.body.classList.add('hidden');
+        }
+
+        // --- LÓGICA DE LAS FUNCIONES DE IA ---
+        async function generateDreamImage() {
+            openModal("Interpretación Onírica", `<img id="dream-image" class="max-w-full max-h-[60vh] rounded-lg shadow-lg mx-auto" src="" alt="Sueño Generado por IA"><p id="dream-prompt" class="text-gray-400 mt-2 text-sm italic"></p>`, 'text-pink-300');
+            const dreamImageEl = document.getElementById('dream-image');
+            const dreamPromptEl = document.getElementById('dream-prompt');
+            dreamPromptEl.textContent = 'Interpretando el subconsciente de Federico...';
+            
+            const stressLevel = state.dom.realitySlider.value;
+            let descriptor = "calmo, sereno y esperanzador";
+            if (stressLevel > 35 && stressLevel <= 70) descriptor = "ligeramente caótico, con energía nerviosa e incertidumbre";
+            else if (stressLevel > 70) descriptor = "caótico, con alta ansiedad, abrumador y tonos oscuros";
+            const prompt = `Una imagen surrealista y onírica que representa el sentimiento dentro de la cabeza de alguien antes de una entrevista de trabajo. El tono emocional es ${descriptor}. Estilo de pintura al óleo, abstracto.`;
+            
+            dreamPromptEl.textContent = `Prompt: "${prompt}"`;
+            const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'] } };
+
+            try {
+                const result = await callGeminiAPI({ endpoint: 'generateContent', payload, model: 'gemini-2.5-flash-image-preview' });
+                const imageData = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                if (!imageData) throw new Error("No se recibió data de imagen.");
+                dreamImageEl.src = `data:image/png;base64,${imageData}`;
+            } catch(err) {
+                dreamPromptEl.textContent = "No se pudo contactar al subconsciente. Intenta de nuevo.";
+            } finally {
+                state.dom.modal.loader.classList.add('hidden');
+            }
+        }
+        
+        async function generateGenericResponse(type, promptTemplate) {
+            const titles = { excuse: "Plan de Escape", peptalk: "Charla Motivacional", job: "Análisis del Puesto", interviewer: "Perfil del Entrevistador" };
+            const colors = { excuse: 'text-yellow-300', peptalk: 'text-green-300', job: 'text-slate-300', interviewer: 'text-red-300' };
+            openModal(titles[type], `<div id="generic-content"><p id="generic-character" class="font-bold text-lg"></p><p id="generic-text" class="text-white text-lg"></p></div>`, colors[type]);
+            
+            const characterEl = document.getElementById('generic-character');
+            const textEl = document.getElementById('generic-text');
+            const stressLevel = state.dom.realitySlider.value;
+            const prompt = promptTemplate.replace(/\${stressLevel}/g, stressLevel);
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+
+            try {
+                const result = await callGeminiAPI({ endpoint: 'generateContent', payload });
+                const responseText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!responseText) throw new Error("Respuesta vacía de la API.");
+
+                const [characterName, ...parts] = responseText.split(':');
+                const text = parts.join(':').trim();
+                characterEl.textContent = characterName.trim() + (type === 'excuse' ? " sugiere:" : (type === 'peptalk' ? " dice:" : (type === 'job' ? " opina:" : " se imagina que...")));
+                textEl.textContent = `"${text}"`;
+                playTTS(text, characterName.trim());
+            } catch(err) {
+                characterEl.textContent = "Error";
+                textEl.textContent = "Las emociones no colaboran. Intenta de nuevo.";
+            }
+        }
+
+        async function listenToThought() {
+            openModal("Monólogo Interno", `<p id="thought-text" class="text-white text-lg italic"></p>`, 'text-blue-300');
+            const textEl = document.getElementById('thought-text');
+            const stressLevel = state.dom.realitySlider.value;
+            const recentHistory = state.conversationHistory.slice(-4).map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
+            const prompt = `Actúa como el monólogo interno de Federico, un hombre de 30 años a punto de una entrevista de trabajo con un nivel de estrés de ${stressLevel}/100. La conversación reciente con sus emociones es:\n${recentHistory}\nGenera un pensamiento corto (1-2 frases), en primera persona, que refleje su estado mental. No uses el nombre de ninguna emoción. Solo el pensamiento. Sé breve y habla en español.`;
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+
+            try {
+                const result = await callGeminiAPI({ endpoint: 'generateContent', payload });
+                const thought = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!thought) throw new Error("Respuesta vacía.");
+                textEl.textContent = `"${thought}"`;
+                playTTS(thought, "Federico");
+            } catch(err) {
+                textEl.textContent = "Mente en blanco...";
+            }
+        }
+        
+        async function generateCoreMemory() {
+            openModal("Recuerdo Esencial", `<p id="memory-text" class="text-white text-lg"></p>`, 'text-orange-300');
+            const textEl = document.getElementById('memory-text');
+            const stressLevel = state.dom.realitySlider.value;
+            const recentHistory = state.conversationHistory.slice(-4).map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
+            const prompt = `Basado en el nivel de estrés de Federico (${stressLevel}/100) y su conversación reciente con sus emociones:\n${recentHistory}\nGenera un "recuerdo esencial" corto y poderoso de su pasado que esté influyendo en su estado actual. Puede ser un recuerdo de éxito o fracaso. Descríbelo en una frase.`;
+            
+            try {
+                const result = await callGeminiAPI({ endpoint: 'generateContent', payload: { contents: [{ parts: [{ text: prompt }] }] } });
+                const memoryText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!memoryText) throw new Error("No se pudo generar el recuerdo.");
+                textEl.textContent = `"${memoryText}"`;
+
+                const memoryColor = stressLevel > 50 ? 0xff0000 : 0x00ff00;
+                const orb = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.4, 32, 16),
+                    new THREE.MeshBasicMaterial({ color: memoryColor, transparent: true, opacity: 0.8, emissive: memoryColor })
+                );
+                orb.position.set(0, 0, 2);
+                state.three.scene.add(orb);
+                
+                let scale = 1;
+                const pulseInterval = setInterval(() => {
+                    scale = scale === 1 ? 1.2 : 1;
+                    orb.scale.set(scale, scale, scale);
+                }, 500);
+
+                setTimeout(() => {
+                    clearInterval(pulseInterval);
+                    state.three.scene.remove(orb);
+                }, 4000);
+
+            } catch(err) {
+                textEl.textContent = "Un recuerdo borroso... no se puede acceder.";
+            }
+        }
+        
+        async function forgeBelief() {
+            const micSVG = `<svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>`;
+            const bodyHTML = `<p class="text-lg text-gray-300 mb-4">Di una creencia para que Federico la adopte.</p><button id="belief-mic-button" class="mx-auto w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center focus:outline-none ring-4 ring-purple-500/50 ui-element transition-transform hover:scale-110">${micSVG}</button>`;
+            openModal("Forjar una Nueva Creencia", bodyHTML, 'text-purple-300');
+
+            const beliefMicButton = document.getElementById('belief-mic-button');
+
+            try {
+                const beliefText = await new Promise((resolve, reject) => {
+                    const tempSpeech = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                    tempSpeech.lang = 'es-ES';
+                    tempSpeech.onresult = (e) => resolve(e.results[0][0].transcript);
+                    tempSpeech.onerror = (e) => reject(e.error);
+                    
+                    beliefMicButton.onclick = () => {
+                        beliefMicButton.classList.add('pulse');
+                        tempSpeech.start();
+                    };
+                });
+                
+                state.dom.modal.loader.classList.remove('hidden');
+                state.dom.modal.body.classList.add('hidden');
+
+                const prompt = `Un usuario ha introducido una nueva creencia para Federico: "${beliefText}". 1. ¿Cuál de las siguientes emociones es la principal impulsora de esta creencia? (Ansiedad, Depresión, Vagancia, Adolescencia, Brutalidad). 2. ¿Cuál sería la consecuencia o reacción interna inmediata de Federico al adoptar esta creencia? (1-2 frases). Responde en formato JSON: {"emocion": "...", "consecuencia": "..."}`;
+                const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
+                const result = await callGeminiAPI({ endpoint: 'generateContent', payload });
+                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!jsonText) throw new Error("Respuesta JSON vacía.");
+                
+                const { emocion, consecuencia } = JSON.parse(jsonText);
+                
+                const newBodyHTML = `<p class="font-bold text-lg text-purple-200">${emocion} toma el control:</p><p class="text-white text-lg mt-2">"${consecuencia}"</p>`;
+                
+                openModal("Creencia Forjada", newBodyHTML, 'text-purple-300');
+                playTTS(consecuencia, emocion);
+                animateSpeakingCharacter(emocion);
+
+            } catch(err) {
+                console.error("Error forjando la creencia:", err);
+                const errorBodyHTML = `<p class="text-red-400">La creencia no pudo formarse. Inténtalo de nuevo.</p>`;
+                openModal("Error al Forjar Creencia", errorBodyHTML, 'text-red-300');
+            }
+        }
+
+        // --- UTILIDADES ---
+        window.addEventListener('resize', () => {
+            state.three.camera.aspect = window.innerWidth / window.innerHeight;
+            state.three.camera.updateProjectionMatrix();
+            state.three.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        function base64ToArrayBuffer(b64) { const bin = window.atob(b64); const len = bin.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) { bytes[i] = bin.charCodeAt(i); } return bytes.buffer; }
+        function pcmToWav(pcm, sampleRate) { const b = new ArrayBuffer(44 + pcm.byteLength); const v = new DataView(b); const s = (s,o,v) => { for (let i=0;i<s.length;i++,o++) v.setUint8(o,s.charCodeAt(i)); }; s('RIFF',0,v); v.setUint32(4,36+pcm.byteLength,true); s('WAVE',8,v); s('fmt ',12,v); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sampleRate,true); v.setUint32(28,sampleRate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); s('data',36,v); v.setUint32(40,pcm.byteLength,true); new Int16Array(b,44).set(pcm); return new Blob([b],{type:'audio/wav'}); }
+    </script>
+</body>
+</html>
+
